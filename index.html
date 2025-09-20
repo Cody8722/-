@@ -89,7 +89,7 @@
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div class="lg-col-span-1 bg-white p-6 rounded-2xl shadow-lg no-print space-y-4">
+            <div class="lg:col-span-1 bg-white p-6 rounded-2xl shadow-lg no-print space-y-4">
                 <!-- Profile Management -->
                 <div class="p-3 border rounded-lg bg-gray-50 space-y-3">
                     <label for="profile-selector" class="text-sm font-bold text-gray-700">設定檔管理</label>
@@ -116,6 +116,12 @@
                         </select>
                     </div>
                 </div>
+
+                <div class="mt-2 flex items-center space-x-2">
+                    <input type="checkbox" id="skip-holidays" class="form-checkbox h-5 w-5 text-purple-600 rounded" checked>
+                    <label for="skip-holidays" class="text-sm font-medium text-gray-700">自動跳過國定假日 (台灣)</label>
+                </div>
+
                 <div>
                     <div class="flex justify-between items-center mb-1">
                         <label for="tasks" class="text-sm font-medium text-gray-700">勤務地點／任務</label>
@@ -290,6 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
         maxShifts: document.getElementById('max-shifts'),
         unavailability: document.getElementById('unavailability'),
         preferences: document.getElementById('preferences'),
+        skipHolidays: document.getElementById('skip-holidays'),
     };
     const profileSelector = document.getElementById('profile-selector');
     const newProfileBtn = document.getElementById('new-profile-btn');
@@ -565,9 +572,43 @@ document.addEventListener('DOMContentLoaded', () => {
     importFileInput.addEventListener('change', importSettingsFromFile);
     
     // --- Core Logic ---
+    async function fetchHolidays(years) {
+        const holidaySet = new Set();
+        const uniqueYears = [...new Set(years)]; 
+
+        const promises = uniqueYears.map(year => 
+            fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/TW`)
+                .then(res => res.ok ? res.json() : [])
+        );
+
+        try {
+            const results = await Promise.all(promises);
+            results.forEach(yearHolidays => {
+                yearHolidays.forEach(holiday => {
+                    const date = new Date(holiday.date);
+                    holidaySet.add(`${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`);
+                });
+            });
+        } catch (error) {
+            console.error("讀取國定假日失敗:", error);
+            alert("無法自動讀取國定假日資訊，將正常排班。請檢查網路連線。");
+        }
+        return holidaySet;
+    }
+
     async function generateAllSchedules() {
         const saved = await saveCurrentSettingsToServer();
         if (!saved) return;
+        
+        let holidaySet = new Set();
+        if (allInputs.skipHolidays.checked) {
+            const startDate = new Date(allInputs.startDate.value);
+            const numWeeks = parseInt(allInputs.numWeeks.value) || 1;
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + numWeeks * 7);
+            const yearsToFetch = Array.from(new Set([startDate.getFullYear(), endDate.getFullYear()]));
+            holidaySet = await fetchHolidays(yearsToFetch);
+        }
 
         try {
             const numWeeks = parseInt(allInputs.numWeeks.value) || 1;
@@ -608,18 +649,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let i = 0; i < numWeeks; i++) {
                 const weekDayDates = [];
+                const weekDayIsHoliday = [];
                 const tempDate = new Date(currentStartDate);
                 for (let j = 0; j < 5; j++) {
+                    const dateStr = `${tempDate.getFullYear()}/${tempDate.getMonth() + 1}/${tempDate.getDate()}`;
                     weekDayDates.push(`${tempDate.getMonth() + 1}/${tempDate.getDate()}`);
+                    weekDayIsHoliday.push(holidaySet.has(dateStr));
                     tempDate.setDate(tempDate.getDate() + 1);
                 }
 
-                const weeklyData = generateSingleWeek(tasks, people, unavailabilities, preferences);
+                const weeklyData = generateSingleWeek(tasks, people, unavailabilities, preferences, weekDayIsHoliday);
                 const endDate = new Date(currentStartDate);
                 endDate.setDate(currentStartDate.getDate() + 4);
                 const dateRange = `${currentStartDate.getMonth() + 1}/${currentStartDate.getDate()}~${endDate.getMonth() + 1}/${endDate.getDate()}`;
                 
-                scheduleData.push({ ...weeklyData, dateRange, tasks, people, weekDayDates });
+                scheduleData.push({ ...weeklyData, dateRange, tasks, people, weekDayDates, weekDayIsHoliday });
                 currentStartDate.setDate(currentStartDate.getDate() + 7);
             }
             
@@ -631,14 +675,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    function generateSingleWeek(tasks, people, unavailabilities, preferences) {
+    function generateSingleWeek(tasks, people, unavailabilities, preferences, weekDayIsHoliday) {
         const shiftCounts = Object.fromEntries(people.map(p => [p.name, 0]));
         const schedule = Array(5).fill(null).map(() => Array(tasks.length).fill(null).map(() => []));
         const dailyAssignments = Array(5).fill(null).map(() => []);
 
-        for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
-            const task = tasks[taskIndex];
-            for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
+        for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
+            if (weekDayIsHoliday[dayIndex]) continue;
+
+            for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
+                const task = tasks[taskIndex];
                 let eligibleCandidates = people.filter(p => 
                     !unavailabilities[p.name]?.includes(dayIndex) &&
                     shiftCounts[p.name] < p.maxShifts &&
@@ -699,7 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadPdfBtn.disabled = false;
     }
 
-    function renderScheduleTable({ schedule, tasks, weekDayDates }, colorScheme) {
+    function renderScheduleTable({ schedule, tasks, weekDayDates, weekDayIsHoliday }, colorScheme) {
         const weekDayNames = ['一', '二', '三', '四', '五'];
         const table = document.createElement('table');
         table.className = 'w-full border-collapse text-center';
@@ -718,10 +764,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     tableBody += `<td class="p-2 border border-gray-300 text-left font-semibold align-middle" style="background-color: #${colorScheme.header};" rowspan="${task.count}">${task.name}</td>`;
                 }
                 for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
-                    const name = schedule[dayIndex][taskIndex][i];
-                    const cellContent = name || '<span class="text-gray-500">(空)</span>';
-                    const bgColor = name ? `style="background-color: #${colorScheme.name};"` : '';
-                    tableBody += `<td class="p-2 border border-gray-300" ${bgColor}>${cellContent}</td>`;
+                     if (weekDayIsHoliday[dayIndex]) {
+                        if (i === 0) { // Only render this once for each task
+                            tableBody += `<td class="p-2 border border-gray-300 bg-red-100 text-red-700 font-bold align-middle" rowspan="${task.count}">國定假日</td>`;
+                        }
+                    } else {
+                        const name = schedule[dayIndex][taskIndex][i];
+                        const cellContent = name || '<span class="text-gray-500">(空)</span>';
+                        const bgColor = name ? `style="background-color: #${colorScheme.name};"` : '';
+                        tableBody += `<td class="p-2 border border-gray-300" ${bgColor}>${cellContent}</td>`;
+                    }
                 }
                 tableBody += `</tr>`;
             }
@@ -764,7 +816,7 @@ document.addEventListener('DOMContentLoaded', () => {
             printContainer.style.backgroundColor = '#ffffff';
 
             generatedData.slice(0, 4).forEach((data, index) => {
-                const { schedule, tasks, dateRange, colorScheme, weekDayDates } = data;
+                const { schedule, tasks, dateRange, colorScheme, weekDayDates, weekDayIsHoliday } = data;
                 
                 const scheduleContainer = document.createElement('div');
                 scheduleContainer.style.marginBottom = '20px';
@@ -804,11 +856,17 @@ document.addEventListener('DOMContentLoaded', () => {
                             rowHTML += `<td rowspan="${task.count}" style="padding: 4px; border: 1px solid #333; background-color: #${colorScheme.header}; font-weight: bold; text-align: left; vertical-align: middle;">${task.name}</td>`;
                         }
                         for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
-                            const name = schedule[dayIndex][taskIndex][i];
-                            const cellContent = name || '(空)';
-                            const bgColor = name ? `#${colorScheme.name}` : '#ffffff';
-                            const color = name ? '#000000' : '#aaaaaa';
-                            rowHTML += `<td style="padding: 4px; border: 1px solid #333; background-color: ${bgColor}; color: ${color}; text-align: center; vertical-align: middle;">${cellContent}</td>`;
+                            if (weekDayIsHoliday[dayIndex]) {
+                                if (i === 0) {
+                                    rowHTML += `<td rowspan="${task.count}" style="padding: 4px; border: 1px solid #333; background-color: #fecaca; color: #b91c1c; font-weight: bold; text-align: center; vertical-align: middle;">國定假日</td>`;
+                                }
+                            } else {
+                                const name = schedule[dayIndex][taskIndex][i];
+                                const cellContent = name || '(空)';
+                                const bgColor = name ? `#${colorScheme.name}` : '#ffffff';
+                                const color = name ? '#000000' : '#aaaaaa';
+                                rowHTML += `<td style="padding: 4px; border: 1px solid #333; background-color: ${bgColor}; color: ${color}; text-align: center; vertical-align: middle;">${cellContent}</td>`;
+                            }
                         }
                         row.innerHTML = rowHTML;
                         tbody.appendChild(row);
@@ -1029,7 +1087,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!generatedData) return;
         const wb = XLSX.utils.book_new();
         generatedData.forEach((data, index) => {
-            const { schedule, tasks, dateRange, colorScheme, weekDayDates } = data;
+            const { schedule, tasks, dateRange, colorScheme, weekDayDates, weekDayIsHoliday } = data;
             const sheetName = `第 ${index + 1} 週 (${dateRange})`.replace(/[/~]/g, '-');
             const weekDayNames = ["一", "二", "三", "四", "五"];
             const header = ["勤務地點", ...weekDayDates.map((date, i) => `星期${weekDayNames[i]}\n(${date})`)];
@@ -1038,8 +1096,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let i = 0; i < task.count; i++) {
                     const row = [ i === 0 ? task.name : null ];
                     for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
-                        const names = schedule[dayIndex][taskIndex];
-                        row.push(i < names.length ? names[i] : null);
+                        if (weekDayIsHoliday[dayIndex]) {
+                            row.push(i === 0 ? "國定假日" : null);
+                        } else {
+                            const names = schedule[dayIndex][taskIndex];
+                            row.push(i < names.length ? names[i] : null);
+                        }
                     }
                     sheetData.push(row);
                 }
@@ -1050,20 +1112,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const headerStyle = { font: { ...font, bold: true }, fill: { fgColor: { rgb: colorScheme.header } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
             const nameCellStyle = { font: font, fill: { fgColor: { rgb: colorScheme.name } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
             const emptyCellStyle = { font: font, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
+            const holidayStyle = { font: { ...font, bold: true, color: { rgb: "b91c1c" } }, fill: { fgColor: { rgb: "fecaca" } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
+            
+            if (!ws['!merges']) ws['!merges'] = [];
             let rowIndex = 1;
-            ws['!merges'] = [];
             tasks.forEach(task => {
                 if (task.count > 1) ws['!merges'].push({ s: { r: rowIndex, c: 0 }, e: { r: rowIndex + task.count - 1, c: 0 } });
                 rowIndex += task.count;
             });
+
+            weekDayIsHoliday.forEach((isHoliday, dayIndex) => {
+                if(isHoliday){
+                    let startRow = 1;
+                    tasks.forEach(task => {
+                        if(task.count > 0) {
+                           ws['!merges'].push({ s: { r: startRow, c: dayIndex + 1 }, e: { r: startRow + task.count - 1, c: dayIndex + 1 } });
+                           startRow += task.count;
+                        }
+                    });
+                }
+            });
+            
             const range = XLSX.utils.decode_range(ws['!ref']);
             for (let R = range.s.r; R <= range.e.r; ++R) {
                 for (let C = range.s.c; C <= range.e.c; ++C) {
                     const cell_ref = XLSX.utils.encode_cell({ c: C, r: R });
                     if (!ws[cell_ref]) ws[cell_ref] = { t: 's', v: null };
-                    if (R === 0) ws[cell_ref].s = headerStyle;
-                    else if (C === 0) { if (ws[cell_ref].v) ws[cell_ref].s = headerStyle; }
-                    else {
+
+                    if (R === 0) {
+                        ws[cell_ref].s = headerStyle;
+                    } else if (C === 0) {
+                        if (ws[cell_ref].v) ws[cell_ref].s = headerStyle;
+                    } else if (weekDayIsHoliday[C-1]){
+                         ws[cell_ref].s = holidayStyle;
+                    } else {
                         if (ws[cell_ref].v) ws[cell_ref].s = nameCellStyle;
                         else {
                             ws[cell_ref].s = emptyCellStyle;
@@ -1072,9 +1154,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
+            
             ws['!cols'] = [{ wch: 20 }].concat(weekDayDates.map(() => ({ wch: 15 })));
+            
             XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
         });
+
         XLSX.writeFile(wb, "班表.xlsx");
     }
     
@@ -1082,7 +1167,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!generatedData) return;
         let tsvContent = '';
         generatedData.forEach((data, index) => {
-            const { schedule, tasks, dateRange, weekDayDates } = data;
+            const { schedule, tasks, dateRange, weekDayDates, weekDayIsHoliday } = data;
             const weekDayNames = ['一', '二', '三', '四', '五'];
             tsvContent += `--- 第 ${index + 1} 週班表 (${dateRange}) ---\n`;
             tsvContent += ['勤務地點', ...weekDayDates.map((date, i) => `星期${weekDayNames[i]}(${date})`)].join('\t') + '\n';
@@ -1090,8 +1175,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let i = 0; i < task.count; i++) {
                     const rowData = [ i === 0 ? task.name : '' ];
                     for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
-                        const names = schedule[dayIndex][taskIndex];
-                        rowData.push(i < names.length ? names[i] : '');
+                         if (weekDayIsHoliday[dayIndex]) {
+                            rowData.push(i === 0 ? "國定假日" : '');
+                         } else {
+                            const names = schedule[dayIndex][taskIndex];
+                            rowData.push(i < names.length ? names[i] : '');
+                         }
                     }
                     tsvContent += rowData.join('\t') + '\n';
                 }

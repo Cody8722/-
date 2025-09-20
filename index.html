@@ -574,28 +574,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Core Logic ---
     async function fetchHolidays(years) {
         const holidaySet = new Set();
-        const uniqueYears = [...new Set(years)]; 
-
-        // Using Taiwan government holiday data from a reliable open-source project
-        const promises = uniqueYears.map(year => 
-             fetch(`https://cdn.jsdelivr.net/gh/nnh-project/nnh@main/data/${year}.json`)
+        const uniqueYears = [...new Set(years)];
+        
+        // Using Taiwan government holiday data (from New Taipei City open data platform, which mirrors central gov data)
+        const promises = uniqueYears.map(year => {
+            const url = `https://data.ntpc.gov.tw/api/v1/rest/datastore/382000000A-000077-002?limit=100&filters[date][like]=${year}`;
+            return fetch(url)
                 .then(res => {
                     if (res.ok) return res.json();
                     console.warn(`無法取得 ${year} 年的假日資料。`);
-                    return []; // Return empty array on failure to not break Promise.all
-                })
-        );
+                    return { success: false };
+                });
+        });
 
         try {
             const results = await Promise.all(promises);
-            results.forEach(yearData => {
-                if (Array.isArray(yearData)) {
-                    yearData.forEach(day => {
-                        // We only care about days that are actual holidays, not workdays on weekends
-                        if (day.isHoliday) {
-                             const date = new Date(day.date);
-                             // The key format must match what's used in generateAllSchedules
-                             holidaySet.add(`${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`);
+            results.forEach(data => {
+                if (data.success && data.result && data.result.records) {
+                    data.result.records.forEach(day => {
+                        if (day.isHoliday === "是") {
+                            // The API date format is YYYY/MM/DD, which is what we need.
+                            holidaySet.add(day.date);
                         }
                     });
                 }

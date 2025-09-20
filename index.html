@@ -578,7 +578,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Using Taiwan government holiday data (from New Taipei City open data platform, which mirrors central gov data)
         const promises = uniqueYears.map(year => {
-            const url = `https://data.ntpc.gov.tw/api/v1/rest/datastore/382000000A-000077-002?limit=100&filters[date][like]=${year}`;
+            // The API uses ROC year, so we need to convert.
+            const rocYear = year - 1911;
+            const url = `https://data.ntpc.gov.tw/api/v1/rest/datastore/382000000A-000077-002?limit=100&filters[year][like]=${rocYear}`;
             return fetch(url)
                 .then(res => {
                     if (res.ok) return res.json();
@@ -592,9 +594,11 @@ document.addEventListener('DOMContentLoaded', () => {
             results.forEach(data => {
                 if (data.success && data.result && data.result.records) {
                     data.result.records.forEach(day => {
+                        // isHoliday is "是" for holidays, "否" for workdays on weekends
                         if (day.isHoliday === "是") {
-                            // The API date format is YYYY/MM/DD, which is what we need.
-                            holidaySet.add(day.date);
+                            const dateParts = day.date.split('/');
+                            const date = new Date(parseInt(dateParts[0]) + 1911, parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+                            holidaySet.add(`${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`);
                         }
                     });
                 }

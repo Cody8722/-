@@ -576,18 +576,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const holidaySet = new Set();
         const uniqueYears = [...new Set(years)]; 
 
+        // Using Taiwan government holiday data from a reliable open-source project
         const promises = uniqueYears.map(year => 
-            fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/TW`)
-                .then(res => res.ok ? res.json() : [])
+             fetch(`https://cdn.jsdelivr.net/gh/nnh-project/nnh@main/data/${year}.json`)
+                .then(res => {
+                    if (res.ok) return res.json();
+                    console.warn(`無法取得 ${year} 年的假日資料。`);
+                    return []; // Return empty array on failure to not break Promise.all
+                })
         );
 
         try {
             const results = await Promise.all(promises);
-            results.forEach(yearHolidays => {
-                yearHolidays.forEach(holiday => {
-                    const date = new Date(holiday.date);
-                    holidaySet.add(`${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`);
-                });
+            results.forEach(yearData => {
+                if (Array.isArray(yearData)) {
+                    yearData.forEach(day => {
+                        // We only care about days that are actual holidays, not workdays on weekends
+                        if (day.isHoliday) {
+                             const date = new Date(day.date);
+                             // The key format must match what's used in generateAllSchedules
+                             holidaySet.add(`${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`);
+                        }
+                    });
+                }
             });
         } catch (error) {
             console.error("讀取國定假日失敗:", error);

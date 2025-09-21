@@ -572,37 +572,25 @@ document.addEventListener('DOMContentLoaded', () => {
     importFileInput.addEventListener('change', importSettingsFromFile);
     
     // --- Core Logic ---
-    async function fetchHolidays(years) {
+    async function fetchHolidays() {
         const holidaySet = new Set();
-        const uniqueYears = [...new Set(years)];
+        // Using a more reliable open-source project that mirrors Taiwan government's holiday data
+        const url = 'https://cdn.jsdelivr.net/npm/taiwan-holiday-mcp@1/dist/holiday.json';
         
-        // Using Taiwan government holiday data (from New Taipei City open data platform, which mirrors central gov data)
-        const promises = uniqueYears.map(year => {
-            // The API uses ROC year, so we need to convert.
-            const rocYear = year - 1911;
-            const url = `https://data.ntpc.gov.tw/api/v1/rest/datastore/382000000A-000077-002?limit=100&filters[year][like]=${rocYear}`;
-            return fetch(url)
-                .then(res => {
-                    if (res.ok) return res.json();
-                    console.warn(`無法取得 ${year} 年的假日資料。`);
-                    return { success: false };
-                });
-        });
-
         try {
-            const results = await Promise.all(promises);
-            results.forEach(data => {
-                if (data.success && data.result && data.result.records) {
-                    data.result.records.forEach(day => {
-                        // isHoliday is "是" for holidays, "否" for workdays on weekends
-                        if (day.isHoliday === "是") {
-                            const dateParts = day.date.split('/');
-                            const date = new Date(parseInt(dateParts[0]) + 1911, parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
-                            holidaySet.add(`${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`);
-                        }
-                    });
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP 錯誤！狀態: ${response.status}`);
+            }
+            const holidays = await response.json();
+            
+            holidays.forEach(day => {
+                if (day.isHoliday) {
+                    // The date format is "YYYY/MM/DD", which is exactly what we need.
+                    holidaySet.add(day.date);
                 }
             });
+
         } catch (error) {
             console.error("讀取國定假日失敗:", error);
             alert("無法自動讀取國定假日資訊，將正常排班。請檢查網路連線。");
@@ -616,12 +604,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let holidaySet = new Set();
         if (allInputs.skipHolidays.checked) {
-            const startDate = new Date(allInputs.startDate.value);
-            const numWeeks = parseInt(allInputs.numWeeks.value) || 1;
-            const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + numWeeks * 7);
-            const yearsToFetch = Array.from(new Set([startDate.getFullYear(), endDate.getFullYear()]));
-            holidaySet = await fetchHolidays(yearsToFetch);
+            // The new API fetches all years, so we don't need to calculate which years to fetch.
+            holidaySet = await fetchHolidays();
         }
 
         try {

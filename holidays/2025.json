@@ -105,13 +105,13 @@
         "date": "20251014",
         "week": "二",
         "isHoliday": true,
-        "description": "高級部第一次期中考暨國中部第一次定期評量"
+        "description": "第一次定期評量"
     },
     {
         "date": "20251015",
         "week": "三",
         "isHoliday": true,
-        "description": "高級部第一次期中考暨國中部第一次定期評量"
+        "description": "第一次定期評量"
     },
     {
         "date": "20251020",
@@ -123,13 +123,13 @@
         "date": "20251209",
         "week": "二",
         "isHoliday": true,
-        "description": "高一、高二及技高部第二次期中考暨國中部第二次定期評量"
+        "description": "第二次定期評量"
     },
     {
         "date": "20251210",
         "week": "三",
         "isHoliday": true,
-        "description": "高一、高二及技高部第二次期中考暨國中部第二次定期評量"
+        "description": "第二次定期評量"
     }   
 ]
 

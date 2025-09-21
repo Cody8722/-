@@ -11,12 +11,15 @@ COPY package*.json ./
 # 4. 安裝專案依賴
 RUN npm install
 
-# 5. 複製所有專案檔案到工作目錄
+# 5. 複製假日資料檔案
+COPY holidays/ ./holidays/
+
+# 6. 複製所有專案檔案到工作目錄
 COPY . .
 
-# 6. 告訴 Docker 容器在執行時會監聽 3000 這個 port
+# 7. 告訴 Docker 容器在執行時會監聽 3000 這個 port
 EXPOSE 3000
 
-# 7. 定義容器啟動時要執行的指令
+# 8. 定義容器啟動時要執行的指令
 CMD [ "npm", "start" ]
 

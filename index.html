@@ -573,7 +573,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Core Logic ---
     async function fetchHolidays() {
-        // This will hold the final status for each date, true for holiday, false for make-up workday
         const holidayStatusMap = new Map();
         const url = `${API_BASE_URL}/api/holidays`; // Fetch from our own server
         
@@ -589,7 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const month = parseInt(day.date.substring(4, 6), 10);
                 const date = parseInt(day.date.substring(6, 8), 10);
                 const dateStr = `${year}/${month}/${date}`;
-                holidayStatusMap.set(dateStr, day.isHoliday);
+                holidayStatusMap.set(dateStr, { isHoliday: day.isHoliday, description: day.description });
             });
 
         } catch (error) {
@@ -624,15 +623,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const unavailabilities = {};
             const unavailabilityText = allInputs.unavailability.value || '';
             unavailabilityText.split('\n').filter(line => line.trim() !== '').forEach(line => {
-                const parts = line.split(':');
-                if (parts.length === 2) unavailabilities[parts[0].trim()] = parts[1].split(',').map(day => dayMap[day.trim()]).filter(d => d !== undefined);
+                const parts = line.split(':', 1);
+                if (parts.length === 1 && line.includes(':')) { // Handle cases like "Name:"
+                    const name = line.substring(0, line.indexOf(':')).trim();
+                    const days = line.substring(line.indexOf(':') + 1);
+                     unavailabilities[name] = days.split(',').map(day => dayMap[day.trim()]).filter(d => d !== undefined);
+                } else if (parts.length === 1 && !line.includes(':')) {
+                    // ignore lines without a colon
+                }
             });
 
             const preferences = {};
             const preferencesText = allInputs.preferences.value || '';
             preferencesText.split('\n').filter(line => line.trim() !== '').forEach(line => {
-                const parts = line.split(':');
-                if (parts.length === 2) preferences[parts[0].trim()] = parts[1].split(',').map(task => task.trim());
+                 const parts = line.split(':', 1);
+                if (parts.length === 1 && line.includes(':')) { // Handle cases like "Name:"
+                     const name = line.substring(0, line.indexOf(':')).trim();
+                    const tasks = line.substring(line.indexOf(':') + 1);
+                    preferences[name] = tasks.split(',').map(task => task.trim());
+                }
             });
 
             if (tasks.length === 0 || people.length === 0) {
@@ -658,8 +667,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const dateStr = `${tempDate.getFullYear()}/${tempDate.getMonth() + 1}/${tempDate.getDate()}`;
                     const day = tempDate.getDay();
                     
-                    const isSpecialDay = holidayStatusMap.has(dateStr);
-                    const isHoliday = isSpecialDay && holidayStatusMap.get(dateStr);
+                    const specialDayInfo = holidayStatusMap.get(dateStr);
+                    const isSpecialDay = !!specialDayInfo;
+                    const isHoliday = isSpecialDay && specialDayInfo.isHoliday;
                     const isWeekend = day === 0 || day === 6;
 
                     const shouldSchedule = !isWeekend && !isHoliday;
@@ -668,14 +678,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         date: new Date(tempDate),
                         shouldSchedule: shouldSchedule,
                         isHoliday: isHoliday,
-                        description: isHoliday ? "國定假日" : ""
+                        description: isSpecialDay ? specialDayInfo.description : ""
                     });
                     
                     weekDayDates.push(`${tempDate.getMonth() + 1}/${tempDate.getDate()}`);
                     tempDate.setDate(tempDate.getDate() + 1);
                 }
 
-                const weeklyData = generateSingleWeek(tasks, people, unavailabilities, scheduleDays);
+                const weeklyData = generateSingleWeek(tasks, people, unavailabilities, preferences, scheduleDays);
                 const endDate = new Date(currentStartDate);
                 endDate.setDate(currentStartDate.getDate() + 4); // Display range is still Mon-Fri
                 const dateRange = `${currentStartDate.getMonth() + 1}/${currentStartDate.getDate()}~${endDate.getMonth() + 1}/${endDate.getDate()}`;
@@ -692,7 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    function generateSingleWeek(tasks, people, unavailabilities, scheduleDays) {
+    function generateSingleWeek(tasks, people, unavailabilities, preferences, scheduleDays) {
         const shiftCounts = Object.fromEntries(people.map(p => [p.name, 0]));
         const schedule = Array(7).fill(null).map(() => Array(tasks.length).fill(null).map(() => []));
         const dailyAssignments = Array(7).fill(null).map(() => []);
@@ -786,14 +796,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 for (let dayIndex = 0; dayIndex < 5; dayIndex++) { // Only loop through Mon-Fri
                      if (!scheduleDays[dayIndex].shouldSchedule) {
-                        const isHoliday = scheduleDays[dayIndex].isHoliday;
+                        const dayInfo = scheduleDays[dayIndex];
+                        const text = dayInfo.description || "休息";
+                        const isHoliday = dayInfo.isHoliday;
                         
-                        let text = "休息";
                         let bgColor = 'bg-gray-100';
                         let textColor = 'text-gray-400';
 
                         if(isHoliday) {
-                            text = "國定假日";
                             bgColor = 'bg-red-100';
                             textColor = 'text-red-700';
                         }
@@ -892,13 +902,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
                              if (!scheduleDays[dayIndex].shouldSchedule) {
                                  if (i === 0) {
-                                    const isHoliday = scheduleDays[dayIndex].isHoliday;
-                                    let text = "休息";
+                                    const dayInfo = scheduleDays[dayIndex];
+                                    const text = dayInfo.description || "休息";
+                                    const isHoliday = dayInfo.isHoliday;
                                     let bgColor = '#f3f4f6';
                                     let color = '#9ca3af';
 
                                     if(isHoliday) {
-                                        text = "國定假日";
                                         bgColor = '#fecaca';
                                         color = '#b91c1c';
                                     }
@@ -1157,6 +1167,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const nameCellStyle = { font: font, fill: { fgColor: { rgb: colorScheme.name } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
             const emptyCellStyle = { font: font, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
             const holidayStyle = { font: { ...font, bold: true, color: { rgb: "b91c1c" } }, fill: { fgColor: { rgb: "fecaca" } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
+            const restStyle = { font: { ...font, color: { rgb: "9ca3af" } }, fill: { fgColor: { rgb: "f3f4f6" } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
             
             if (!ws['!merges']) ws['!merges'] = [];
             let rowIndex = 1;
@@ -1190,12 +1201,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         const dayInfo = scheduleDays[C-1];
                         if (!dayInfo.shouldSchedule) {
-                            ws[cell_ref].s = holidayStyle;
+                           ws[cell_ref].s = dayInfo.isHoliday ? holidayStyle : restStyle;
                         } else {
-                            if (ws[cell_ref].v) ws[cell_ref].s = nameCellStyle;
-                            else {
-                                ws[cell_ref].s = emptyCellStyle;
-                                if (!ws[cell_ref].v) ws[cell_ref].v = '(空)';
+                            if (ws[cell_ref].v && ws[cell_ref].v !== '(空)') {
+                               ws[cell_ref].s = nameCellStyle;
+                            } else {
+                               ws[cell_ref].s = emptyCellStyle;
+                               if (!ws[cell_ref].v) ws[cell_ref].v = '(空)';
                             }
                         }
                     }

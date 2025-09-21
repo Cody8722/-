@@ -574,8 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Core Logic ---
     async function fetchHolidays() {
         const holidaySet = new Set();
-        // Using a more reliable open-source project that mirrors Taiwan government's holiday data
-        const url = 'https://cdn.jsdelivr.net/npm/taiwan-holiday-mcp@1/dist/holiday.json';
+        const url = `${API_BASE_URL}/api/holidays`; // Fetch from our own server
         
         try {
             const response = await fetch(url);
@@ -586,14 +585,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             holidays.forEach(day => {
                 if (day.isHoliday) {
-                    // The date format is "YYYY/MM/DD", which is exactly what we need.
-                    holidaySet.add(day.date);
+                    // The date format is "YYYYMMDD". Convert it to "YYYY/M/D".
+                    const year = day.date.substring(0, 4);
+                    const month = parseInt(day.date.substring(4, 6), 10);
+                    const date = parseInt(day.date.substring(6, 8), 10);
+                    holidaySet.add(`${year}/${month}/${date}`);
                 }
             });
 
         } catch (error) {
             console.error("讀取國定假日失敗:", error);
-            alert("無法自動讀取國定假日資訊，將正常排班。請檢查網路連線。");
+            alert("無法從伺服器讀取國定假日資訊，將正常排班。");
         }
         return holidaySet;
     }
@@ -604,7 +606,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let holidaySet = new Set();
         if (allInputs.skipHolidays.checked) {
-            // The new API fetches all years, so we don't need to calculate which years to fetch.
             holidaySet = await fetchHolidays();
         }
 

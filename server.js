@@ -2,6 +2,7 @@ const express = require('express');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs').promises;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -75,6 +76,34 @@ const writeDbState = async (state) => {
     );
 };
 
+// --- Holiday Data Caching ---
+let cachedHolidays = null;
+async function loadHolidays() {
+    if (cachedHolidays) return cachedHolidays;
+    
+    const holidaysDir = path.join(__dirname, 'holidays');
+    let allHolidays = [];
+    
+    try {
+        const files = await fs.readdir(holidaysDir);
+        for (const file of files) {
+            if (path.extname(file) === '.json') {
+                const filePath = path.join(holidaysDir, file);
+                const fileContent = await fs.readFile(filePath, 'utf-8');
+                const yearHolidays = JSON.parse(fileContent);
+                allHolidays = allHolidays.concat(yearHolidays);
+            }
+        }
+        cachedHolidays = allHolidays;
+        console.log(`成功載入 ${cachedHolidays.length} 筆假日資料。`);
+        return cachedHolidays;
+    } catch (error) {
+        console.error("!!! 讀取假日資料檔案失敗:", error);
+        return []; 
+    }
+}
+
+
 // Middleware to check DB connection
 app.use(async (req, res, next) => {
     if (!isConnected) {
@@ -85,6 +114,19 @@ app.use(async (req, res, next) => {
 
 
 // === API Endpoints ===
+
+// GET holiday data
+app.get('/api/holidays', async (req, res) => {
+    try {
+        const holidays = await loadHolidays();
+        if (holidays.length === 0) {
+            return res.status(500).json({ message: "伺服器上找不到假日資料檔案。" });
+        }
+        res.json(holidays);
+    } catch (e) {
+        res.status(500).json({ message: "讀取假日資料時發生伺服器錯誤。" });
+    }
+});
 
 // GET all data
 app.get('/api/data', async (req, res) => {
@@ -238,6 +280,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, async () => {
     await connectToDb();
+    await loadHolidays(); // Pre-cache holidays on startup
     console.log(`伺服器正在 http://localhost:${PORT} 上運行`);
 });
 

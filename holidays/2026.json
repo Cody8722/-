@@ -64,5 +64,23 @@
         "week": "五",
         "isHoliday": true,
         "description": "國慶日"
-    }
+    },
+    {
+        "date": "20260116",
+        "week": "五",
+        "isHoliday": true,
+        "description": "高級部一、二年級期末考暨國中部第三次定期評量"
+    },
+    {
+        "date": "202601119",
+        "week": "一",
+        "isHoliday": true,
+        "description": "高級部一、二年級期末考暨國中部第三次定期評量"
+    },
+    {
+        "date": "20260120",
+        "week": "二",
+        "isHoliday": true,
+        "description": "高級部一、二年級期末考暨國中部第三次定期評量"
+    },
 ]

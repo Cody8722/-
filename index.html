@@ -844,61 +844,61 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4'); 
-
-            for (let index = 0; index < generatedData.length; index++) {
-                const data = generatedData[index];
+            
+            const printContainer = document.createElement('div');
+            printContainer.style.position = 'absolute';
+            printContainer.style.left = '-9999px';
+            printContainer.style.top = '0';
+            printContainer.style.width = '1000px'; 
+            printContainer.style.padding = '20px';
+            printContainer.style.fontFamily = "'標楷體', 'BiauKai', 'DFKai-SB', 'Noto Sans TC', sans-serif";
+            printContainer.style.backgroundColor = '#ffffff';
+            
+            generatedData.forEach((data, index) => {
+                const scheduleContainer = document.createElement('div');
+                scheduleContainer.style.marginBottom = '20px';
                 
-                const singleWeekContainer = document.createElement('div');
-                singleWeekContainer.style.position = 'absolute';
-                singleWeekContainer.style.left = '-9999px';
-                singleWeekContainer.style.backgroundColor = '#ffffff';
-                singleWeekContainer.style.width = '1000px'; 
-                singleWeekContainer.style.padding = '20px';
-                singleWeekContainer.style.fontFamily = "'標楷體', 'BiauKai', 'DFKai-SB', 'Noto Sans TC', sans-serif";
-
                 const weekTitle = document.createElement('h2');
                 weekTitle.textContent = `第 ${index + 1} 週班表 (${data.dateRange})`;
                 weekTitle.style.fontSize = '20px';
                 weekTitle.style.fontWeight = 'bold';
                 weekTitle.style.textAlign = 'center';
                 weekTitle.style.marginBottom = '15px';
-                singleWeekContainer.appendChild(weekTitle);
+                scheduleContainer.appendChild(weekTitle);
 
                 const tableElement = renderScheduleTable(data, data.colorScheme);
                 tableElement.style.fontSize = '12px';
-                tableElement.querySelectorAll('th, td').forEach(cell => {
+                 tableElement.querySelectorAll('th, td').forEach(cell => {
                     cell.style.padding = '5px';
                 });
-                singleWeekContainer.appendChild(tableElement);
-
-                document.body.appendChild(singleWeekContainer);
-
-                const canvas = await html2canvas(singleWeekContainer, { scale: 2, useCORS: true });
-                document.body.removeChild(singleWeekContainer);
-
-                const imgData = canvas.toDataURL('image/png');
-                const A4_PAGE_HEIGHT = 297;
-                const A4_PAGE_WIDTH = 210;
-                const MARGIN = 15;
-                const PDF_WIDTH = A4_PAGE_WIDTH - MARGIN * 2;
-                const PDF_HEIGHT = A4_PAGE_HEIGHT - MARGIN * 2;
-                const imgProps = pdf.getImageProperties(imgData);
-                const aspectRatio = imgProps.width / imgProps.height;
-                let finalImgHeight = PDF_WIDTH / aspectRatio;
-                let finalImgWidth = PDF_WIDTH;
-                if (finalImgHeight > PDF_HEIGHT) {
-                    finalImgHeight = PDF_HEIGHT;
-                    finalImgWidth = finalImgHeight * aspectRatio;
-                }
-                const xPos = (A4_PAGE_WIDTH - finalImgWidth) / 2;
-                
-                if (index > 0) {
-                    pdf.addPage();
-                }
-                pdf.addImage(imgData, 'PNG', xPos, MARGIN, finalImgWidth, finalImgHeight);
-            }
+                scheduleContainer.appendChild(tableElement);
+                printContainer.appendChild(scheduleContainer);
+            });
             
-            pdf.save('班表.pdf');
+            document.body.appendChild(printContainer);
+
+            const canvas = await html2canvas(printContainer, { scale: 2, useCORS: true });
+            document.body.removeChild(printContainer);
+
+            const imgData = canvas.toDataURL('image/png');
+            const A4_PAGE_HEIGHT = 297;
+            const A4_PAGE_WIDTH = 210;
+            const MARGIN = 15;
+            const PDF_WIDTH = A4_PAGE_WIDTH - MARGIN * 2;
+            const PDF_HEIGHT = A4_PAGE_HEIGHT - MARGIN * 2;
+            const imgProps = pdf.getImageProperties(imgData);
+            const aspectRatio = imgProps.width / imgProps.height;
+            let finalImgHeight = PDF_WIDTH / aspectRatio;
+            let finalImgWidth = PDF_WIDTH;
+            if (finalImgHeight > PDF_HEIGHT) {
+                finalImgHeight = PDF_HEIGHT;
+                finalImgWidth = finalImgHeight * aspectRatio;
+            }
+            const xPos = (A4_PAGE_WIDTH - finalImgWidth) / 2;
+            
+            pdf.addImage(imgData, 'PNG', xPos, MARGIN, finalImgWidth, finalImgHeight);
+            
+            pdf.save('班表_多合一.pdf');
 
         } catch (error) {
             console.error("產生 PDF 時發生錯誤:", error);

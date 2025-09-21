@@ -774,9 +774,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderScheduleTable({ schedule, tasks, weekDayDates, scheduleDays }, colorScheme) {
         const weekDayNames = ['一', '二', '三', '四', '五'];
         const table = document.createElement('table');
-        table.className = 'w-full border-collapse text-center';
+        table.className = 'w-full border-collapse text-center table-fixed';
         
-        let tableHead = `<thead><tr><th class="p-2 border border-gray-300 text-left w-32" style="background-color: #${colorScheme.header};">勤務地點</th>`;
+        let tableHead = `<thead><tr><th class="p-2 border border-gray-300 text-left" style="background-color: #${colorScheme.header};">勤務地點</th>`;
         weekDayDates.slice(0, 5).forEach((date, index) => {
             const dayName = weekDayNames[index];
             tableHead += `<th class="p-2 border border-gray-300" style="background-color: #${colorScheme.header};">星期${dayName}<br>(${date})</th>`;

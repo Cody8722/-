@@ -18,10 +18,10 @@
             color: #000000;
         }
         
-        /* -- 列印專用樣式 (四合一垂直版) -- */
+        /* -- 列印專用樣式 -- */
         @media print {
             @page {
-                size: A4 portrait; /* 設定為直向列印 */
+                size: A4 portrait;
             }
             * {
                 -webkit-print-color-adjust: exact !important;
@@ -621,23 +621,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const dayMap = {'一':0, '二':1, '三':2, '四':3, '五':4, '六': 5, '日': 6}; // Include weekends for unavailabilities
             
             const unavailabilities = {};
-            const unavailabilityText = allInputs.unavailability.value || '';
-            unavailabilityText.split('\n').filter(line => line.trim() !== '').forEach(line => {
-                const parts = line.split(':', 1);
-                if (parts.length === 1 && line.includes(':')) { // Handle cases like "Name:"
+            allInputs.unavailability.value.split('\n').filter(line => line.trim() !== '').forEach(line => {
+                 const parts = line.split(':', 1);
+                 if (parts.length === 1 && line.includes(':')) {
                     const name = line.substring(0, line.indexOf(':')).trim();
                     const days = line.substring(line.indexOf(':') + 1);
                      unavailabilities[name] = days.split(',').map(day => dayMap[day.trim()]).filter(d => d !== undefined);
-                } else if (parts.length === 1 && !line.includes(':')) {
-                    // ignore lines without a colon
                 }
             });
 
             const preferences = {};
-            const preferencesText = allInputs.preferences.value || '';
-            preferencesText.split('\n').filter(line => line.trim() !== '').forEach(line => {
+            allInputs.preferences.value.split('\n').filter(line => line.trim() !== '').forEach(line => {
                  const parts = line.split(':', 1);
-                if (parts.length === 1 && line.includes(':')) { // Handle cases like "Name:"
+                 if (parts.length === 1 && line.includes(':')) {
                      const name = line.substring(0, line.indexOf(':')).trim();
                     const tasks = line.substring(line.indexOf(':') + 1);
                     preferences[name] = tasks.split(',').map(task => task.trim());
@@ -848,129 +844,67 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4'); 
-            
-            const printContainer = document.createElement('div');
-            printContainer.style.position = 'absolute';
-            printContainer.style.left = '-9999px';
-            printContainer.style.top = '0';
-            printContainer.style.width = '1200px';
-            printContainer.style.fontFamily = "'Noto Sans TC', sans-serif";
-            printContainer.style.color = '#000000';
-            printContainer.style.backgroundColor = '#ffffff';
 
-            generatedData.slice(0, 4).forEach((data, index) => {
-                const { schedule, tasks, dateRange, colorScheme, weekDayDates, scheduleDays } = data;
+            for (let index = 0; index < generatedData.length; index++) {
+                const data = generatedData[index];
                 
-                const scheduleContainer = document.createElement('div');
-                scheduleContainer.style.marginBottom = '20px';
-                scheduleContainer.style.pageBreakInside = 'avoid';
+                const singleWeekContainer = document.createElement('div');
+                singleWeekContainer.style.position = 'absolute';
+                singleWeekContainer.style.left = '-9999px';
+                singleWeekContainer.style.backgroundColor = '#ffffff';
+                singleWeekContainer.style.width = '1000px'; 
+                singleWeekContainer.style.padding = '20px';
+                singleWeekContainer.style.fontFamily = "'標楷體', 'BiauKai', 'DFKai-SB', 'Noto Sans TC', sans-serif";
 
                 const weekTitle = document.createElement('h2');
-                weekTitle.textContent = `第 ${index + 1} 週班表 (${dateRange})`;
-                weekTitle.style.fontSize = '16px';
+                weekTitle.textContent = `第 ${index + 1} 週班表 (${data.dateRange})`;
+                weekTitle.style.fontSize = '20px';
                 weekTitle.style.fontWeight = 'bold';
                 weekTitle.style.textAlign = 'center';
-                weekTitle.style.marginBottom = '8px';
-                scheduleContainer.appendChild(weekTitle);
+                weekTitle.style.marginBottom = '15px';
+                singleWeekContainer.appendChild(weekTitle);
 
-                const table = document.createElement('table');
-                table.style.width = '100%';
-                table.style.borderCollapse = 'collapse';
-                table.style.fontSize = '10px';
-                
-                const thead = document.createElement('thead');
-                const headerRow = document.createElement('tr');
-                const weekDayNames = ['一', '二', '三', '四', '五'];
-
-                let headerHTML = `<th style="padding: 4px; border: 1px solid #333; background-color: #${colorScheme.header}; font-weight: bold; text-align: left;">勤務地點</th>`;
-                weekDayDates.slice(0, 5).forEach((date, i) => {
-                     const dayName = weekDayNames[i];
-                    headerHTML += `<th style="padding: 4px; border: 1px solid #333; background-color: #${colorScheme.header}; font-weight: bold; text-align: center;">星期${dayName}<br>(${date})</th>`;
+                const tableElement = renderScheduleTable(data, data.colorScheme);
+                tableElement.style.fontSize = '12px';
+                tableElement.querySelectorAll('th, td').forEach(cell => {
+                    cell.style.padding = '5px';
                 });
-                headerRow.innerHTML = headerHTML;
-                thead.appendChild(headerRow);
-                table.appendChild(thead);
+                singleWeekContainer.appendChild(tableElement);
 
-                const tbody = document.createElement('tbody');
-                tasks.forEach((task, taskIndex) => {
-                    for (let i = 0; i < task.count; i++) {
-                        const row = document.createElement('tr');
-                        let rowHTML = '';
-                        if (i === 0) {
-                            rowHTML += `<td rowspan="${task.count}" style="padding: 4px; border: 1px solid #333; background-color: #${colorScheme.header}; font-weight: bold; text-align: left; vertical-align: middle;">${task.name}</td>`;
-                        }
-                        for (let dayIndex = 0; dayIndex < 5; dayIndex++) {
-                             if (!scheduleDays[dayIndex].shouldSchedule) {
-                                 if (i === 0) {
-                                    const dayInfo = scheduleDays[dayIndex];
-                                    const text = dayInfo.description || "休息";
-                                    const isHoliday = dayInfo.isHoliday;
-                                    let bgColor = '#f3f4f6';
-                                    let color = '#9ca3af';
+                document.body.appendChild(singleWeekContainer);
 
-                                    if(isHoliday) {
-                                        bgColor = '#fecaca';
-                                        color = '#b91c1c';
-                                    }
-                                    rowHTML += `<td rowspan="${task.count}" style="padding: 4px; border: 1px solid #333; background-color: ${bgColor}; color: ${color}; font-weight: bold; text-align: center; vertical-align: middle;">${text}</td>`;
-                                }
-                            } else {
-                                const name = schedule[dayIndex][taskIndex][i];
-                                const cellContent = name || '(空)';
-                                const bgColor = name ? `#${colorScheme.name}` : '#ffffff';
-                                const color = name ? '#000000' : '#aaaaaa';
-                                rowHTML += `<td style="padding: 4px; border: 1px solid #333; background-color: ${bgColor}; color: ${color}; text-align: center; vertical-align: middle;">${cellContent}</td>`;
-                            }
-                        }
-                        row.innerHTML = rowHTML;
-                        tbody.appendChild(row);
-                    }
-                });
-                table.appendChild(tbody);
+                const canvas = await html2canvas(singleWeekContainer, { scale: 2, useCORS: true });
+                document.body.removeChild(singleWeekContainer);
+
+                const imgData = canvas.toDataURL('image/png');
+                const A4_PAGE_HEIGHT = 297;
+                const A4_PAGE_WIDTH = 210;
+                const MARGIN = 15;
+                const PDF_WIDTH = A4_PAGE_WIDTH - MARGIN * 2;
+                const PDF_HEIGHT = A4_PAGE_HEIGHT - MARGIN * 2;
+                const imgProps = pdf.getImageProperties(imgData);
+                const aspectRatio = imgProps.width / imgProps.height;
+                let finalImgHeight = PDF_WIDTH / aspectRatio;
+                let finalImgWidth = PDF_WIDTH;
+                if (finalImgHeight > PDF_HEIGHT) {
+                    finalImgHeight = PDF_HEIGHT;
+                    finalImgWidth = finalImgHeight * aspectRatio;
+                }
+                const xPos = (A4_PAGE_WIDTH - finalImgWidth) / 2;
                 
-                scheduleContainer.appendChild(table);
-                printContainer.appendChild(scheduleContainer);
-            });
-
-            document.body.appendChild(printContainer);
-
-            const canvas = await html2canvas(printContainer, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff'
-            });
-
-            document.body.removeChild(printContainer);
-
-            const imgData = canvas.toDataURL('image/png');
-            const A4_PAGE_HEIGHT = 297;
-            const A4_PAGE_WIDTH = 210;
-            const MARGIN = 10;
-            const PDF_WIDTH = A4_PAGE_WIDTH - MARGIN * 2;
-            const PDF_HEIGHT = A4_PAGE_HEIGHT - MARGIN * 2;
-
-            const imgProps = pdf.getImageProperties(imgData);
-            const aspectRatio = imgProps.width / imgProps.height;
-            
-            let finalImgHeight = PDF_WIDTH / aspectRatio;
-            let finalImgWidth = PDF_WIDTH;
-
-            if (finalImgHeight > PDF_HEIGHT) {
-                finalImgHeight = PDF_HEIGHT;
-                finalImgWidth = finalImgHeight * aspectRatio;
+                if (index > 0) {
+                    pdf.addPage();
+                }
+                pdf.addImage(imgData, 'PNG', xPos, MARGIN, finalImgWidth, finalImgHeight);
             }
-
-            const xPos = (A4_PAGE_WIDTH - finalImgWidth) / 2;
-            const yPos = (A4_PAGE_HEIGHT - finalImgHeight) / 2;
-
-            pdf.addImage(imgData, 'PNG', xPos, yPos > MARGIN ? yPos : MARGIN, finalImgWidth, finalImgHeight);
+            
             pdf.save('班表.pdf');
 
         } catch (error) {
             console.error("產生 PDF 時發生錯誤:", error);
             alert("抱歉，產生 PDF 時發生未預期的錯誤。");
         } finally {
-            downloadPdfBtn.textContent = originalBtnText;
+            downloadPdfBtn.textContent = '下載 PDF';
             downloadPdfBtn.disabled = false;
         }
     }
@@ -1167,7 +1101,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const nameCellStyle = { font: font, fill: { fgColor: { rgb: colorScheme.name } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
             const emptyCellStyle = { font: font, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
             const holidayStyle = { font: { ...font, bold: true, color: { rgb: "b91c1c" } }, fill: { fgColor: { rgb: "fecaca" } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
-            const restStyle = { font: { ...font, color: { rgb: "9ca3af" } }, fill: { fgColor: { rgb: "f3f4f6" } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center", wrapText: true } };
             
             if (!ws['!merges']) ws['!merges'] = [];
             let rowIndex = 1;
@@ -1201,7 +1134,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         const dayInfo = scheduleDays[C-1];
                         if (!dayInfo.shouldSchedule) {
-                           ws[cell_ref].s = dayInfo.isHoliday ? holidayStyle : restStyle;
+                           ws[cell_ref].s = holidayStyle;
                         } else {
                             if (ws[cell_ref].v && ws[cell_ref].v !== '(空)') {
                                ws[cell_ref].s = nameCellStyle;
@@ -1257,3 +1190,4 @@ document.addEventListener('DOMContentLoaded', () => {
     </script>
     </body>
     </html>
+

@@ -57,13 +57,13 @@
         "date": "20250602",
         "week": "一",
         "isHoliday": true,
-        "description": "端午節(補假)"
+        "description": "端午節"
     },
     {
         "date": "20250908",
         "week": "一",
         "isHoliday": true,
-        "description": "中秋節(補假)"
+        "description": "中秋節"
     },
     {
         "date": "20250928",
